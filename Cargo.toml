@@ -1,0 +1,3 @@
+[workspace]
+members = ["crates/castbell", "crates/castbell-client"]
+resolver = "2"

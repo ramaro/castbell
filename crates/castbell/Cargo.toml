@@ -1,0 +1,27 @@
+[package]
+name = "castbell"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+axum = "0.8"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+url = { version = "2", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+futures = "0.3"
+base64 = "0.22"
+cast-sender = "0.3"
+smol = "2"
+smol-timeout = "0.6"
+
+# Static musl builds (container image): build OpenSSL from source and link it
+# statically. Feature unification makes async-native-tls use the vendored copy.
+[target.'cfg(target_env = "musl")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
