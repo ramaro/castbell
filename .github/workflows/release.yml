@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  binaries:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: x64
+          - target: aarch64-unknown-linux-musl
+            arch: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: taiki-e/install-action@v2
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        with:
+          tool: cross
+
+      # cross uses docker + qemu so vendored openssl links correctly for arm64.
+      - uses: docker/setup-qemu-action@v3
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+
+      - name: Build (x64 native, arm64 via cross)
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            cross build --release --target ${{ matrix.target }} -p castbell
+          else
+            cargo build --release --target ${{ matrix.target }} -p castbell
+          fi
+
+      - name: Archive binary
+        run: |
+          cp target/${{ matrix.target }}/release/castbell castbell
+          tar -czf castbell-linux-${{ matrix.arch }}.tar.gz castbell
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: castbell-linux-${{ matrix.arch }}.tar.gz
+
+  container:
+    name: Build & push container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push (amd64 + arm64)
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/ramaro/castbell:latest
+            ghcr.io/ramaro/castbell:${{ github.ref_name }}
+
+      - name: Attach image tag to release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            Container image:
+            `docker pull ghcr.io/ramaro/castbell:${{ github.ref_name }}`
