@@ -160,3 +160,11 @@ cargo test                              # run the test suite
 Multi-stage build: Rust musl target → fully static binary →
 `gcr.io/distroless/static-debian12:nonroot` runtime (~2 MB base). Final image
 is ~16 MB, runs as non-root, and has no shell, libc or OpenSSL in it.
+
+Pre-built images are on GitHub Container Registry (amd64 + arm64):
+
+```sh
+docker pull ghcr.io/ramaro/castbell:latest
+# or a pinned release, e.g v0.0.1 (see releases for latest pinned tag)
+docker pull ghcr.io/ramaro/castbell:v0.0.1
+```
