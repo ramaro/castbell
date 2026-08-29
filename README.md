@@ -168,3 +168,7 @@ docker pull ghcr.io/ramaro/castbell:latest
 # or a pinned release, e.g v0.0.1 (see releases for latest pinned tag)
 docker pull ghcr.io/ramaro/castbell:v0.0.1
 ```
+
+## Disclaimer
+This project was built with the assistance of AI tools. AI was used to help generate code, draft documentation and optimise implementation details.
+All code was reviewed and tested prior to release.
