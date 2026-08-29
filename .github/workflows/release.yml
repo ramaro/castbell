@@ -27,6 +27,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # musl-gcc: links vendored OpenSSL on x64. Installer: perl/make will use
+      # the full path when no alias exists; musl-tools ships it in /usr/bin.
+      - name: Install musl-tools (x64)
+        if: matrix.arch == 'x64'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
       - uses: taiki-e/install-action@v2
         if: matrix.target == 'aarch64-unknown-linux-musl'
         with:
