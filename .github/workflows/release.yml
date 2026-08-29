@@ -11,13 +11,15 @@ permissions:
 jobs:
   binaries:
     name: Build binaries
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
             arch: x64
-          - target: aarch64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
             arch: arm64
 
     steps:
@@ -27,28 +29,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # musl-gcc: links vendored OpenSSL on x64. Installer: perl/make will use
-      # the full path when no alias exists; musl-tools ships it in /usr/bin.
-      - name: Install musl-tools (x64)
-        if: matrix.arch == 'x64'
+      # musl-gcc needed to link the vendored OpenSSL build.
+      - name: Install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - uses: taiki-e/install-action@v2
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-        with:
-          tool: cross
-
-      # cross uses docker + qemu so vendored openssl links correctly for arm64.
-      - uses: docker/setup-qemu-action@v3
-        if: matrix.target == 'aarch64-unknown-linux-musl'
-
-      - name: Build (x64 native, arm64 via cross)
-        run: |
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            cross build --release --target ${{ matrix.target }} -p castbell
-          else
-            cargo build --release --target ${{ matrix.target }} -p castbell
-          fi
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} -p castbell
 
       - name: Archive binary
         run: |
@@ -60,13 +46,19 @@ jobs:
           files: castbell-linux-${{ matrix.arch }}.tar.gz
 
   container:
-    name: Build & push container image
-    runs-on: ubuntu-latest
+    name: Build image (native ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
     steps:
       - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
 
       - name: Login to ghcr.io
         uses: docker/login-action@v3
@@ -75,18 +67,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push (amd64 + arm64)
+      - name: Build & push arch-tagged image
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: |
-            ghcr.io/ramaro/castbell:latest
-            ghcr.io/ramaro/castbell:${{ github.ref_name }}
+          tags: ghcr.io/ramaro/castbell:${{ github.ref_name }}-${{ matrix.arch }}
 
-      - name: Attach image tag to release
-        uses: softprops/action-gh-release@v2
+  manifest:
+    name: Join multi-arch manifest
+    needs: container
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
         with:
-          body: |
-            Container image:
-            `docker pull ghcr.io/ramaro/castbell:${{ github.ref_name }}`
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest (version + latest)
+        run: |-
+          IMAGE=ghcr.io/ramaro/castbell
+          TAG=${{ github.ref_name }}
+          docker buildx imagetools create -t $IMAGE:$TAG \
+            $IMAGE:$TAG-amd64 $IMAGE:$TAG-arm64
+          docker buildx imagetools create -t $IMAGE:latest \
+            $IMAGE:$TAG-amd64 $IMAGE:$TAG-arm64
